@@ -1,0 +1,206 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Conceito de Battle Royale</title>
+    <link rel="preconnect" href="https://fonts.gstatic.com">
+    <link href="https://fonts.googleapis.com/css2?family=Special+Elite&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/Leaflet.awesome-markers/2.0.2/leaflet.awesome-markers.css">
+    <style>
+        body {
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            margin: 0;
+            background: #333;
+            font-family: 'Special Elite', cursive;
+        }
+        .controls {
+            display: flex;
+            flex-wrap: wrap;
+            justify-content: center;
+            margin-bottom: 20px;
+            color: #fff;
+        }
+        #map {
+            height: 80vh;
+            width: 80vw;
+            box-shadow: 0px 0px 50px rgba(0,0,0,0.5);
+        }
+        .input-group {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            margin: 5px;
+        }
+        .input-group label {
+            margin-right: 10px;
+        }
+        .input-group input {
+            width: 60px;
+        }
+        button {
+            padding: 5px 10px;
+            margin: 5px;
+            border: none;
+            color: #fff;
+            background: darkblue;
+            border-radius: 5px;
+            cursor: pointer;
+            transition: background 0.3s;
+        }
+        button:hover {
+            background: darkred;
+        }
+    </style>
+</head>
+<body>
+    <div class="controls">
+        <div class="input-group">
+            <label for="latitude">Latitude:</label>
+            <input type="text" id="latitude">
+        </div>
+        <div class="input-group">
+            <label for="longitude">Longitude:</label>
+            <input type="text" id="longitude">
+        </div>
+        <div class="input-group">
+            <label for="radius">Raio (metros):</label>
+            <input type="number" id="radius" value="500">
+        </div>
+        <div class="input-group">
+            <label for="shrinkTime">Tempo para encolher (segundos):</label>
+            <input type="number" id="shrinkTime" value="10">
+        </div>
+        <div class="input-group">
+            <button onclick="placeCircle()">Posicionar Círculo</button>
+            <button onclick="startTracking()">Iniciar Rastreamento</button>
+            <button onclick="stopTracking()">Parar Rastreamento</button>
+        </div>
+    </div>
+    <div id="map"></div>
+
+    <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/Leaflet.awesome-markers/2.0.2/leaflet.awesome-markers.min.js"></script>
+    <script>
+        const map = L.map('map').setView([51.505, -0.09], 13);
+        let circle;
+        let radius = 500;
+        let trackingId;
+        let userMarker;
+        let health = 100;
+
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            maxZoom: 19,
+            attribution: 'Map data © <a href="https://openstreetmap.org">OpenStreetMap</a> contributors'
+        }).addTo(map);
+
+        function placeCircle() {
+            const latitude = parseFloat(document.getElementById('latitude').value);
+            const longitude = parseFloat(document.getElementById('longitude').value);
+            const location = [latitude, longitude];
+
+            if (circle != null) {
+                map.removeLayer(circle);
+            }
+
+            radius = parseInt(document.getElementById('radius').value);
+
+            circle = L.circle(location, {
+                color: 'red',
+                fillColor: '#f03',
+                fillOpacity: 0.5,
+                radius: radius
+            }).addTo(map);
+
+            shrinkCircle();
+        }
+
+        function shrinkCircle() {
+            if (circle != null) {
+                const shrinkTime = parseInt(document.getElementById('shrinkTime').value);
+                const finalRadius = 5;
+                const shrinkRate = (radius - finalRadius) / shrinkTime;
+
+                const intervalId = setInterval(function(){
+                    radius -= shrinkRate;
+
+                    if(radius > finalRadius){
+                        circle.setRadius(radius);
+                    } else {
+                        circle.setRadius(finalRadius);
+                        alert('O círculo diminuiu completamente!');
+                        clearInterval(intervalId);
+                    }
+                }, 1000);
+            }
+        }
+
+        function startTracking() {
+            if (navigator.geolocation) {
+                trackingId = navigator.geolocation.watchPosition(showPosition, showError, {
+                    enableHighAccuracy: true,
+                    timeout: 5000,
+                    maximumAge: 0
+                });
+            } else { 
+                alert("Geolocalização não é suportada por este navegador.");
+            }
+        }
+
+        function stopTracking() {
+            if (trackingId) {
+                navigator.geolocation.clearWatch(trackingId);
+                trackingId = null;
+            }
+        }
+
+        function showPosition(position) {
+            if (userMarker != null) {
+                map.removeLayer(userMarker);
+            }
+
+            const userPosition = [position.coords.latitude, position.coords.longitude];
+
+            userMarker = L.marker(userPosition, {
+                icon: L.AwesomeMarkers.icon({
+                    icon: 'heartbeat',
+                    prefix: 'fa',
+                    markerColor: 'blue'
+                })
+            }).addTo(map);
+            userMarker.bindPopup("Saúde: " + health + "%<br>Latitude: " + position.coords.latitude + "<br>Longitude: " + position.coords.longitude).openPopup();
+
+            map.setView(userPosition, 13);
+
+            if (circle != null && !circle.getBounds().contains(userPosition)) {
+                health -= 1;
+
+                if (health <= 0) {
+                    alert('Você está morto!');
+                    stopTracking();
+                }
+            }
+        }
+
+        function showError(error) {
+            switch(error.code) {
+                case error.PERMISSION_DENIED:
+                    alert("Usuário negou a solicitação de Geolocalização.");
+                    break;
+                case error.POSITION_UNAVAILABLE:
+                    alert("Informação de localização não disponível.");
+                    break;
+                case error.TIMEOUT:
+                    alert("A solicitação para obter localização do usuário expirou.");
+                    break;
+                case error.UNKNOWN_ERROR:
+                    alert("Ocorreu um erro desconhecido.");
+                    break;
+            }
+        }
+    </script>
+</body>
+</html>
